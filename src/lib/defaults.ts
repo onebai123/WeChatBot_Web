@@ -32,8 +32,9 @@ export const defaultGptConfig: GptConfig = {
   systemMessage: '',
   temperature: 0.5,
   topP: 1,
-  talkCount: 30,
+  talkCount: 10,
   autoMemoryOrganize: true,
+  memoryOrganizeCount: 30,
 }
 
 export const defaultUserInfo: UserInfo = {

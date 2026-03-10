@@ -20,7 +20,8 @@ import { transcribeAudio } from '@/lib/speech'
 import { processWithSearch } from '@/lib/onlineSearch'
 import { autoMessageTimer, generateAutoMessage, isInQuietTime } from '@/lib/autoMessage'
 import { shouldSendEmoji, suggestEmoji, appendEmoji, shouldSendGifEmoji } from '@/lib/emoji'
-import { chatLog, memoryLog, autoMsgLog, apiLog } from '@/lib/logger'
+import { chatLog, memoryLog, autoMsgLog, apiLog, tickleLog, emojiLog, autoMemoryLog } from '@/lib/logger'
+import { flushSave } from '@/store/init'
 import { Github, MessageCircle, Rocket } from 'lucide-react'
 
 interface ChatContainerProps {
@@ -52,6 +53,8 @@ export function ChatContainer({ onMenuClick, showMenuButton, onLock }: ChatConta
   const [showHelp, setShowHelp] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const lastOrganizedCountRef = useRef<number>(0)
+  const hasSentInSessionRef = useRef(false)
 
   // 自动选择第一个人设
   useEffect(() => {
@@ -63,6 +66,21 @@ export function ChatContainer({ onMenuClick, showMenuButton, onLock }: ChatConta
   // 人设 = 会话，直接从当前人设获取消息
   const currentPersona = personas.find(p => p.id === activePersonaId)
   const messages = currentPersona?.messages || []
+
+  // 初始化/切换人设时重置记忆整理计数
+  useEffect(() => {
+    lastOrganizedCountRef.current = messages.length
+    hasSentInSessionRef.current = false
+  }, [activePersonaId])
+
+  // 监听保存失败事件
+  useEffect(() => {
+    const handleSaveError = () => {
+      showToast('⚠️ 数据保存失败，请导出备份后清理空间')
+    }
+    window.addEventListener('save-error', handleSaveError)
+    return () => window.removeEventListener('save-error', handleSaveError)
+  }, [])
 
   const showToast = (msg: string) => {
     setToast(msg)
@@ -174,6 +192,7 @@ export function ChatContainer({ onMenuClick, showMenuButton, onLock }: ChatConta
 
   const handleSend = async (text: string, imageBase64?: string) => {
     if (!activePersonaId) return
+    hasSentInSessionRef.current = true
 
     // 快捷指令处理
     const cmd = text.trim().toLowerCase()
@@ -230,16 +249,22 @@ export function ChatContainer({ onMenuClick, showMenuButton, onLock }: ChatConta
     let systemMessage = persona?.content || gptConfig.systemMessage
     const coreMemories = getTopCoreMemories(activePersonaId, 10)
     if (coreMemories.length > 0) {
-      const memoryText = coreMemories.map(m => `- ${m.content}`).join('\n')
-      systemMessage = `${systemMessage}\n\n[核心记忆]\n${memoryText}`
+      const memoryText = coreMemories.map(m => {
+        const date = new Date(m.createdAt).toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+        return `## 记忆片段 [${date}]\n**重要度**: ${m.importance}\n**摘要**: ${m.content}`
+      }).join('\n\n')
+      systemMessage = `${systemMessage}\n\n${memoryText}`
       memoryLog.info(`加载 ${coreMemories.length} 条核心记忆到系统提示词`)
     }
 
-    // 构建消息历史
-    const contextMessages = messages.slice(-gptConfig.talkCount * 2).map((m) => ({
-      role: m.inversion ? 'user' : 'assistant',
-      content: m.text,
-    }))
+    // 构建消息历史（过滤掉记忆整理通知和拍一拍等系统消息）
+    const contextMessages = messages
+      .filter((m) => !m.isTickle && !m.text.startsWith('📝 记忆已整理'))
+      .slice(-gptConfig.talkCount * 2)
+      .map((m) => ({
+        role: m.inversion ? 'user' : 'assistant',
+        content: m.text,
+      }))
 
     try {
       let userContent = text
@@ -338,7 +363,7 @@ export function ChatContainer({ onMenuClick, showMenuButton, onLock }: ChatConta
 
       // 处理分隔的多条消息：支持 \\ 或 换行符
       const messageParts = responseText.trim()
-        .split(/\\\\|\\(?![\\])|\n{2,}/)  // 支持 \\ 或 双换行
+        .split(/\\+n?|\n{2,}/)  // 支持 \\ 或 \n 或 双换行
         .map(s => s.trim().replace(/\n/g, ' '))  // 单换行替换为空格
         .filter(Boolean)
       
@@ -405,6 +430,7 @@ export function ChatContainer({ onMenuClick, showMenuButton, onLock }: ChatConta
             { apiKey: apiConfig.apiKey, apiBaseUrl: apiConfig.apiBaseUrl, model: gptConfig.model }
           )
           if (gifUrl) {
+            emojiLog.info(`自动发送 GIF 表情`, { url: gifUrl })
             await new Promise(resolve => setTimeout(resolve, 500))
             addMessage(activePersonaId, {
               text: '[表情]',
@@ -414,7 +440,7 @@ export function ChatContainer({ onMenuClick, showMenuButton, onLock }: ChatConta
             })
           }
         } catch (e) {
-          console.error('发送表情失败:', e)
+          emojiLog.error('发送表情失败', { error: e instanceof Error ? e.message : String(e) })
         }
       }
 
@@ -435,6 +461,8 @@ export function ChatContainer({ onMenuClick, showMenuButton, onLock }: ChatConta
       })
     } finally {
       setLoading(false)
+      // 对话完成后立即保存，防止防抖期间刷新导致消息丢失
+      flushSave()
     }
   }
 
@@ -451,6 +479,7 @@ export function ChatContainer({ onMenuClick, showMenuButton, onLock }: ChatConta
       ? `你 拍了拍 ${roleName}`
       : `你 拍了拍 自己`
     
+    tickleLog.info(`拍一拍: ${tickleText}`)
     addMessage(activePersonaId, {
       text: tickleText,
       inversion: false,
@@ -472,10 +501,12 @@ export function ChatContainer({ onMenuClick, showMenuButton, onLock }: ChatConta
         })
 
         if (response) {
+          tickleLog.info(`AI 回应拍一拍: ${response.slice(0, 60)}`)
           let text = response
           // 处理 AI 回拍
           if (text.includes('[tickle]')) {
             text = text.replace(/\[tickle\]/g, '').trim()
+            tickleLog.info(`AI 回拍了你`)
             addMessage(activePersonaId, {
               text: `${roleName} 拍了拍你`,
               inversion: false,
@@ -485,7 +516,7 @@ export function ChatContainer({ onMenuClick, showMenuButton, onLock }: ChatConta
           }
           // 处理换行分隔，拆分成多条消息
           if (text) {
-            const parts = text.split(/\\+/).map(s => s.trim()).filter(Boolean)
+            const parts = text.split(/\\+n?/).map(s => s.trim()).filter(Boolean)
             for (const part of parts) {
               addMessage(activePersonaId, {
                 text: part,
@@ -496,8 +527,9 @@ export function ChatContainer({ onMenuClick, showMenuButton, onLock }: ChatConta
           }
         }
       } catch (e) {
-        console.error('拍一拍回应失败:', e)
+        tickleLog.error('拍一拍回应失败', { error: e instanceof Error ? e.message : String(e) })
       }
+      flushSave()
     }
   }
 
@@ -605,6 +637,8 @@ export function ChatContainer({ onMenuClick, showMenuButton, onLock }: ChatConta
       })
 
       showToast('记忆整理完成')
+      // 立即保存，避免防抖期间用户刷新导致数据丢失
+      flushSave()
     } catch (e) {
       console.error('记忆整理失败:', e)
       showToast('记忆整理失败')
@@ -655,13 +689,26 @@ export function ChatContainer({ onMenuClick, showMenuButton, onLock }: ChatConta
     }
   }
 
-  // 自动记忆整理检查
+  // 自动记忆整理检查（阈值来自设置 memoryOrganizeCount）
+  // 在 loading 结束后检查，避免 loading=true 时 handleOrganizeMemory 被静默跳过
   useEffect(() => {
-    if (gptConfig.autoMemoryOrganize && shouldAutoOrganize(messages.length)) {
-      memoryLog.info(`触发自动记忆整理, 消息数: ${messages.length}`)
+    // 用户未发送消息前，仅跟踪消息数（store 加载/水合导致的变化）
+    if (!hasSentInSessionRef.current) {
+      lastOrganizedCountRef.current = messages.length
+      return
+    }
+    // loading 中不检查，等 loading 结束再触发
+    if (loading) return
+    if (!gptConfig.autoMemoryOrganize || messages.length < 5) return
+    const threshold = gptConfig.memoryOrganizeCount || 30
+    const lastCount = lastOrganizedCountRef.current
+    // 跨过阈值即触发（而非精确取模，避免 AI 一次回复多条消息时跳过）
+    if (Math.floor(messages.length / threshold) > Math.floor(lastCount / threshold)) {
+      autoMemoryLog.info(`触发自动记忆整理, 消息数: ${messages.length}, 阈值: ${threshold}, 上次: ${lastCount}`)
+      lastOrganizedCountRef.current = messages.length
       handleOrganizeMemory()
     }
-  }, [messages.length])
+  }, [messages.length, loading])
 
   // 主动消息功能
   const handleAutoMessage = useCallback(async () => {

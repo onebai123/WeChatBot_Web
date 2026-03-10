@@ -27,25 +27,16 @@ export async function organizeMemory(params: OrganizeMemoryParams): Promise<Orga
     return { summary: '', importance: 3, category: 'other' }
   }
 
-  // 构建对话文本
+  // 构建对话文本（与原版格式一致）
   const dialogueText = messages
-    .map((m) => `[${m.role === 'user' ? '用户' : 'AI'}] ${m.content}`)
+    .map((m) => `${m.dateTime ? m.dateTime + ' | ' : ''}[${m.role === 'user' ? '用户' : roleName}] ${m.content}`)
     .join('\n')
 
-  // 使用与原版相同的提示词格式，并添加重要度和分类评估
-  const summaryPrompt = `请以${roleName}的视角分析以下对话，完成以下任务：
+  // --- 第一步：生成摘要（与原版提示词一致） ---
+  const currentDate = new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' })
+  const summaryPrompt = `当前日期：${currentDate}\n请以${roleName}的视角，用中文总结以下对话，提取重要信息总结为一段话作为记忆片段（直接回复一段话）。注意：必须使用具体日期（如"3月11日"），禁止使用"今天""昨天"等相对时间：\n${dialogueText}`
 
-对话内容：
-${dialogueText}
-
-请按以下JSON格式回复（不要添加任何其他内容）：
-{
-  "summary": "用一段话总结对话中的重要信息",
-  "importance": 1-5的重要度评分（5最重要，1最不重要），
-  "category": "user_info/event/preference/other"（用户信息/事件/偏好/其他）
-}`
-
-  const response = await sendChatMessage({
+  const summaryResponse = await sendChatMessage({
     messages: [{ role: 'user', content: summaryPrompt }],
     model,
     maxTokens: 500,
@@ -54,31 +45,64 @@ ${dialogueText}
     apiBaseUrl,
   })
 
-  // 解析 JSON 响应
-  try {
-    const jsonMatch = response.content.match(/\{[\s\S]*\}/)
-    if (jsonMatch) {
-      const parsed = JSON.parse(jsonMatch[0])
-      return {
-        summary: parsed.summary || '',
-        importance: Math.min(5, Math.max(1, parseInt(parsed.importance) || 3)),
-        category: ['user_info', 'event', 'preference', 'other'].includes(parsed.category) 
-          ? parsed.category 
-          : 'other',
-      }
-    }
-  } catch {
-    // JSON 解析失败，回退到纯文本
-  }
-
-  // 回退：提取纯文本摘要
-  const summary = response.content
+  // 清洗摘要（与原版清洗逻辑一致）
+  const summary = summaryResponse.content
     .replace(/\*{0,2}(重要度|摘要)\*{0,2}[\s:]*\d*[\.]?\d*[\s\\]*/g, '')
     .replace(/## 记忆片段.*/g, '')
     .replace(/[{}"]/g, '')
     .trim()
 
-  return { summary, importance: 3, category: 'other' }
+  if (!summary) {
+    return { summary: '', importance: 3, category: 'other' }
+  }
+
+  // --- 第二步：评估重要性（独立 API 调用，与原版一致） ---
+  const importancePrompt = `为以下记忆的重要性评分（1-5，直接回复数字）：\n${summary}`
+
+  let importance = 3
+  try {
+    const importanceResponse = await sendChatMessage({
+      messages: [{ role: 'user', content: importancePrompt }],
+      model,
+      maxTokens: 10,
+      temperature: 0.3,
+      apiKey,
+      apiBaseUrl,
+    })
+    const importanceMatch = importanceResponse.content.match(/[1-5]/)
+    if (importanceMatch) {
+      importance = parseInt(importanceMatch[0])
+    }
+  } catch {
+    // 评分失败使用默认值
+  }
+
+  // --- 第三步：分类（web 版扩展） ---
+  let category: CoreMemory['category'] = 'other'
+  try {
+    const categoryPrompt = `将以下记忆分类，直接回复一个分类名：
+user_info - 用户个人信息（姓名、职业、年龄等）
+preference - 用户喜好偏好（喜欢的事物、习惯等）
+event - 发生的事件（约会、活动等）
+other - 其他
+记忆内容：${summary}`
+    const categoryResponse = await sendChatMessage({
+      messages: [{ role: 'user', content: categoryPrompt }],
+      model,
+      maxTokens: 10,
+      temperature: 0.3,
+      apiKey,
+      apiBaseUrl,
+    })
+    const cat = categoryResponse.content.trim().toLowerCase()
+    if (['user_info', 'event', 'preference', 'other'].includes(cat)) {
+      category = cat as CoreMemory['category']
+    }
+  } catch {
+    // 分类失败使用默认值
+  }
+
+  return { summary, importance, category }
 }
 
 /**

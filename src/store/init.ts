@@ -84,6 +84,11 @@ export function saveToDataService(): void {
   dataService.save(data)
 }
 
+/** 立即保存（跳过防抖），供关键操作后调用 */
+export function flushSave(): void {
+  saveToDataService()
+}
+
 /** 设置自动保存（订阅 Store 变化） */
 export function setupAutoSave(): void {
   // 清理之前的订阅
@@ -104,6 +109,23 @@ export function setupAutoSave(): void {
     useMemoryStore.subscribe(debouncedSave),
     useThemeStore.subscribe(debouncedSave),
     useEmojiStore.subscribe(debouncedSave),
+  )
+
+  // 页面关闭/刷新/切后台时立即保存，防止防抖期间数据丢失
+  const immediateSave = () => {
+    if (saveTimeout) clearTimeout(saveTimeout)
+    saveToDataService()
+  }
+  const handleVisibilityChange = () => {
+    if (document.hidden) immediateSave()
+  }
+  window.addEventListener('beforeunload', immediateSave)
+  window.addEventListener('pagehide', immediateSave)
+  document.addEventListener('visibilitychange', handleVisibilityChange)
+  unsubscribers.push(
+    () => window.removeEventListener('beforeunload', immediateSave),
+    () => window.removeEventListener('pagehide', immediateSave),
+    () => document.removeEventListener('visibilitychange', handleVisibilityChange),
   )
 
   console.log('[StoreInit] 自动保存已设置')
@@ -127,6 +149,7 @@ export const storeInit = {
   initializeStores,
   setupAutoSave,
   saveToDataService,
+  flushSave,
   collectFromStores,
   cleanup,
   reloadStores,

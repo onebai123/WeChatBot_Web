@@ -46,6 +46,7 @@ export interface GptConfig {
   topP: number
   talkCount: number  // 上下文轮数
   autoMemoryOrganize: boolean
+  memoryOrganizeCount: number  // 记忆整理阈值（每多少条消息触发）
 }
 
 /** API 配置 */

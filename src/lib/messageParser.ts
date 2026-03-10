@@ -17,7 +17,7 @@ export function parseAIResponse(rawText: string): ParsedSegment[] {
   const segments: ParsedSegment[] = []
   
   // 按 \ 或 \\ 分隔消息段
-  const parts = rawText.split(/\\+/).map((s) => s.trim()).filter(Boolean)
+  const parts = rawText.split(/\\+n?/).map((s) => s.trim()).filter(Boolean)
   
   for (const part of parts) {
     // 检查 [tickle] 指令
@@ -80,7 +80,7 @@ export function cleanMessageText(text: string): string {
     .replace(/\[tickle\]/g, '')
     .replace(/\[tickle_self\]/g, '')
     .replace(/\[recall\]/g, '')
-    .replace(/\\+/g, ' ')
+    .replace(/\\+n?/g, ' ')
     .trim()
 }
 

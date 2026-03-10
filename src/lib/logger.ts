@@ -17,9 +17,32 @@ export interface LogEntry {
 
 // 最大日志条数
 const MAX_LOGS = 200
+const STORAGE_KEY = 'wechatbot-logs'
+
+// 从 sessionStorage 恢复日志
+function loadLogs(): LogEntry[] {
+  if (typeof window === 'undefined') return []
+  try {
+    const raw = sessionStorage.getItem(STORAGE_KEY)
+    if (raw) return JSON.parse(raw) as LogEntry[]
+  } catch { /* ignore */ }
+  return []
+}
+
+// 防抖保存到 sessionStorage
+let saveTimer: ReturnType<typeof setTimeout> | null = null
+function persistLogs(): void {
+  if (typeof window === 'undefined') return
+  if (saveTimer) clearTimeout(saveTimer)
+  saveTimer = setTimeout(() => {
+    try {
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(logs))
+    } catch { /* storage full, ignore */ }
+  }, 300)
+}
 
 // 日志存储
-let logs: LogEntry[] = []
+let logs: LogEntry[] = loadLogs()
 
 // 日志监听器
 const listeners: Set<(logs: LogEntry[]) => void> = new Set()
@@ -63,6 +86,7 @@ function createLog(level: LogLevel, module: string, message: string, data?: unkn
 
   // 添加到日志列表
   logs = [...logs.slice(-(MAX_LOGS - 1)), entry]
+  persistLogs()
 
   // 控制台输出
   const prefix = `%c[${entry.timestamp}] %c[${module}]%c`
@@ -98,12 +122,14 @@ export const logger = {
   // 清空日志
   clear: () => {
     logs = []
+    persistLogs()
     listeners.forEach(listener => listener([]))
   },
   
   // 按分类清空日志
   clearByCategory: (category: LogCategory) => {
     logs = logs.filter(l => l.category !== category)
+    persistLogs()
     listeners.forEach(listener => listener([...logs]))
   },
 

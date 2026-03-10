@@ -89,6 +89,9 @@ export function save(data: AppData): boolean {
       console.error('[DataService] localStorage 配额已满，请导出数据后清理')
     }
     
+    // 派发保存失败事件，UI 层可监听并通知用户
+    window.dispatchEvent(new CustomEvent('save-error', { detail: { error } }))
+    
     return false
   }
 }

@@ -67,6 +67,7 @@ const appDataArb = fc.record({
       topP: fc.float({ min: 0, max: 1 }),
       talkCount: fc.integer({ min: 1, max: 100 }),
       autoMemoryOrganize: fc.boolean(),
+      memoryOrganizeCount: fc.integer({ min: 5, max: 50 }),
     }),
     user: fc.record({
       avatar: fc.string(),

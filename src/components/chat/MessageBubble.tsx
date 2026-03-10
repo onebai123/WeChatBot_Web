@@ -155,7 +155,7 @@ export function MessageBubble({ message, personaId, onTickle, onClearMemory }: M
 
   // 解析消息，处理换行符 \
   const renderText = (text: string) => {
-    const parts = text.split(/\\+/)
+    const parts = text.split(/\\+n?/)
     return parts.map((part, index) => (
       <span key={index}>
         {part.trim()}

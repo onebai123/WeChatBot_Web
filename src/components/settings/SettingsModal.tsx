@@ -503,6 +503,18 @@ export function SettingsModal({ open, onClose, defaultTab }: SettingsModalProps)
                   <Switch checked={gptConfig.autoMemoryOrganize} 
                     onChange={() => setGptConfig({ autoMemoryOrganize: !gptConfig.autoMemoryOrganize })} />
                 </div>
+                {gptConfig.autoMemoryOrganize && (
+                  <div className="mt-4 pt-4 border-t border-[var(--theme-border)]">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm text-[var(--theme-text-secondary)]">整理阈值（消息数）</span>
+                      <span className="text-sm font-medium text-violet-600 bg-violet-50 px-2 py-0.5 rounded">{gptConfig.memoryOrganizeCount || 30}</span>
+                    </div>
+                    <input type="range" min="5" max="50" value={gptConfig.memoryOrganizeCount || 30}
+                      onChange={(e) => setGptConfig({ memoryOrganizeCount: Number(e.target.value) })}
+                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-violet-500" />
+                    <p className="text-xs text-[var(--theme-text-muted)] mt-1">每发送 {gptConfig.memoryOrganizeCount || 30} 条消息自动整理一次记忆</p>
+                  </div>
+                )}
               </div>
 
               <div className="flex items-center gap-2 p-4 bg-amber-50 rounded-xl border border-amber-200">
