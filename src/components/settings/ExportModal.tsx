@@ -22,8 +22,8 @@ export function ExportModal({ open, onClose }: ExportModalProps) {
     setTimeout(() => setMessage(null), 3000)
   }
 
-  const handleExport = () => {
-    downloadExport(includeApiKey)
+  const handleExport = async () => {
+    await downloadExport(includeApiKey)
     showMessage('success', '数据已导出')
   }
 

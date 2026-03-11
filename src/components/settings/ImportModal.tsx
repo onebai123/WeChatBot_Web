@@ -190,8 +190,8 @@ export function ImportModal({ open, onClose }: ImportModalProps) {
         {/* 底部 */}
         <div className="px-6 py-4 border-t border-[var(--theme-border)] flex items-center justify-between">
           <button
-            onClick={() => {
-              downloadExport()
+            onClick={async () => {
+              await downloadExport()
               showMessage('success', '导出成功')
             }}
             className="flex items-center gap-1.5 px-3 py-2 text-sm text-[var(--theme-text-secondary)] hover:bg-[var(--theme-border)]/50 rounded-lg transition-colors"

@@ -3,6 +3,7 @@
 import { useRef, useState } from 'react'
 import { Camera, User } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useBlobUrl } from '@/hooks/useBlobUrl'
 
 interface AvatarUploadProps {
   value?: string
@@ -28,6 +29,7 @@ export function AvatarUpload({
   const inputRef = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const resolvedValue = useBlobUrl(value)
 
   const handleClick = () => {
     if (!disabled) inputRef.current?.click()
@@ -81,8 +83,8 @@ export function AvatarUpload({
           disabled && 'cursor-not-allowed opacity-50'
         )}
       >
-        {value ? (
-          <img src={value} alt="avatar" className="w-full h-full object-cover" />
+        {resolvedValue ? (
+          <img src={resolvedValue} alt="avatar" className="w-full h-full object-cover" />
         ) : placeholder ? (
           placeholder
         ) : (

@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils'
 import { usePersonaStore } from '@/store/personaStore'
 import { useConfigStore } from '@/store/configStore'
 import { useThemeStore } from '@/store/themeStore'
+import { useBlobUrl } from '@/hooks/useBlobUrl'
 
 // 语音消息组件
 function VoiceMessage({ audio, duration, isUser }: { audio: string; duration: number; isUser: boolean }) {
@@ -78,9 +79,15 @@ export function MessageBubble({ message, personaId, onTickle, onClearMemory }: M
   const [showMenu, setShowMenu] = useState(false)
   const isUser = message.inversion
   const showArrow = theme.style.bubbleArrow
+
+  // 解析 blob 引用（IndexedDB 存储的图片/语音/头像）
+  const resolvedImage = useBlobUrl(message.image)
+  const resolvedAudio = useBlobUrl(message.audio)
   
   // 获取当前人设
   const persona = personas.find(p => p.id === personaId)
+  const resolvedPersonaAvatar = useBlobUrl(persona?.avatar)
+  const resolvedUserAvatar = useBlobUrl(userInfo.avatar)
 
   // 处理记忆整理分隔线
   if (message.isMemoryDivider) {
@@ -126,8 +133,8 @@ export function MessageBubble({ message, personaId, onTickle, onClearMemory }: M
           className="w-[42px] h-[42px] bg-[var(--theme-avatar-ai)] flex items-center justify-center flex-shrink-0"
           style={{ borderRadius: 'var(--theme-radius-avatar)' }}
         >
-          {persona?.avatar ? (
-            <img src={persona.avatar} alt="ai-avatar" className="w-full h-full object-cover" style={{ borderRadius: 'var(--theme-radius-avatar)' }} />
+          {resolvedPersonaAvatar ? (
+            <img src={resolvedPersonaAvatar} alt="ai-avatar" className="w-full h-full object-cover" style={{ borderRadius: 'var(--theme-radius-avatar)' }} />
           ) : (
             <span className="text-white font-medium text-lg">{persona?.name?.[0] || '?'}</span>
           )}
@@ -183,13 +190,13 @@ export function MessageBubble({ message, personaId, onTickle, onClearMemory }: M
         title={isUser ? '拍自己' : '拍一拍'}
       >
         {isUser ? (
-          userInfo.avatar ? (
-            <img src={userInfo.avatar} alt="avatar" className="w-full h-full object-cover" />
+          resolvedUserAvatar ? (
+            <img src={resolvedUserAvatar} alt="avatar" className="w-full h-full object-cover" />
           ) : (
             <User className="w-5 h-5 text-white" />
           )
-        ) : persona?.avatar ? (
-          <img src={persona.avatar} alt="ai-avatar" className="w-full h-full object-cover" />
+        ) : resolvedPersonaAvatar ? (
+          <img src={resolvedPersonaAvatar} alt="ai-avatar" className="w-full h-full object-cover" />
         ) : (
           <span className="text-white font-medium text-lg">{persona?.name?.[0] || '?'}</span>
         )}
@@ -198,15 +205,15 @@ export function MessageBubble({ message, personaId, onTickle, onClearMemory }: M
       {/* 消息内容 */}
       <div className="relative max-w-[70%]">
         {/* 语音消息 */}
-        {message.audio ? (
-          <VoiceMessage audio={message.audio} duration={message.audioDuration || 0} isUser={isUser} />
+        {resolvedAudio ? (
+          <VoiceMessage audio={resolvedAudio} duration={message.audioDuration || 0} isUser={isUser} />
         ) : /* 纯图片消息 - 不显示气泡背景 */
-        message.image && (!message.text || message.text === '[表情]' || message.text === '请看这张图片') ? (
+        resolvedImage && (!message.text || message.text === '[表情]' || message.text === '请看这张图片') ? (
           <img 
-            src={message.image} 
+            src={resolvedImage} 
             alt="图片" 
             className="max-w-[200px] max-h-[200px] rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
-            onClick={() => window.open(message.image, '_blank')}
+            onClick={() => window.open(resolvedImage, '_blank')}
           />
         ) : (
           <div
@@ -233,13 +240,13 @@ export function MessageBubble({ message, personaId, onTickle, onClearMemory }: M
               />
             )}
             {/* 图片+文字消息 */}
-            {message.image && (
+            {resolvedImage && (
               <div className="mb-2">
                 <img 
-                  src={message.image} 
+                  src={resolvedImage} 
                   alt="图片" 
                   className="max-w-[200px] max-h-[200px] rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
-                  onClick={() => window.open(message.image, '_blank')}
+                  onClick={() => window.open(resolvedImage, '_blank')}
                 />
               </div>
             )}

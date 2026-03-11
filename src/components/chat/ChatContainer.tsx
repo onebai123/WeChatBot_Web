@@ -18,6 +18,7 @@ import { generateTickleResponse, organizeMemory, shouldAutoOrganize } from '@/li
 import { recognizeImage } from '@/lib/vision'
 import { transcribeAudio } from '@/lib/speech'
 import { processWithSearch } from '@/lib/onlineSearch'
+import { useBlobUrl } from '@/hooks/useBlobUrl'
 import { autoMessageTimer, generateAutoMessage, isInQuietTime } from '@/lib/autoMessage'
 import { shouldSendEmoji, suggestEmoji, appendEmoji, shouldSendGifEmoji } from '@/lib/emoji'
 import { chatLog, memoryLog, autoMsgLog, apiLog, tickleLog, emojiLog, autoMemoryLog } from '@/lib/logger'
@@ -36,6 +37,7 @@ export function ChatContainer({ onMenuClick, showMenuButton, onLock }: ChatConta
     autoMessageConfig, quietTimeConfig, visionConfig, onlineSearchConfig, emojiConfig,
     setAutoMessageConfig
   } = useConfigStore()
+  const resolvedBgImage = useBlobUrl(userInfo.backgroundImage)
   const { 
     personas, activePersonaId, setActive,
     addMessage, updateMessage, recallMessage, clearMessages 
@@ -806,8 +808,8 @@ export function ChatContainer({ onMenuClick, showMenuButton, onLock }: ChatConta
       {/* 消息列表 */}
       <div 
         className="flex-1 overflow-y-auto py-4"
-        style={userInfo.backgroundImage ? {
-          backgroundImage: `url(${userInfo.backgroundImage})`,
+        style={resolvedBgImage ? {
+          backgroundImage: `url(${resolvedBgImage})`,
           backgroundSize: 'cover',
           backgroundPosition: 'center',
         } : undefined}

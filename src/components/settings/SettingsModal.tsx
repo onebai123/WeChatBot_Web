@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { X, Eye, EyeOff, User, Bot, Image, Settings, Key, Zap, Palette, Database, Trash2, Download, Upload, FileJson, FolderArchive, Github } from 'lucide-react'
 import { useConfigStore } from '@/store/configStore'
 import { cn } from '@/lib/utils'
+import { useBlobUrl } from '@/hooks/useBlobUrl'
 import { ThemeSwitcher } from './ThemeSwitcher'
 import { AvatarUpload } from '../common/AvatarUpload'
 import { MODEL_OPTIONS, DEFAULT_MODEL, isPresetModel, API_PROVIDERS, getModelsForProvider, detectProvider } from '@/lib/constants'
@@ -26,6 +27,7 @@ export function SettingsModal({ open, onClose, defaultTab }: SettingsModalProps)
     setGptConfig, setApiConfig, setUserInfo,
     setAutoMessageConfig, setQuietTimeConfig, setVisionConfig, setOnlineSearchConfig, setEmojiConfig
   } = useConfigStore()
+  const resolvedBgImage = useBlobUrl(userInfo.backgroundImage)
   const [showApiKey, setShowApiKey] = useState(false)
   const [activeTab, setActiveTab] = useState<TabKey>('api')
   const [customModelMode, setCustomModelMode] = useState(false)
@@ -253,9 +255,9 @@ export function SettingsModal({ open, onClose, defaultTab }: SettingsModalProps)
                     className="border-2 border-dashed border-gray-200 rounded-xl p-6 text-center cursor-pointer hover:border-blue-300 hover:bg-blue-50/50 transition-all"
                     onClick={() => document.getElementById('bg-upload')?.click()}
                   >
-                    {userInfo.backgroundImage ? (
+                    {resolvedBgImage ? (
                       <div className="relative inline-block">
-                        <img src={userInfo.backgroundImage} className="w-32 h-20 rounded-lg object-cover" />
+                        <img src={resolvedBgImage} className="w-32 h-20 rounded-lg object-cover" />
                         <button
                           onClick={(e) => { e.stopPropagation(); setUserInfo({ backgroundImage: '' }) }}
                           className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full text-xs hover:bg-red-600"
@@ -691,8 +693,8 @@ function StorageStatsPanel() {
     window.location.reload()
   }
 
-  const handleExport = () => {
-    downloadExport(false)
+  const handleExport = async () => {
+    await downloadExport(false)
   }
 
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {

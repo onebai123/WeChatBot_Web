@@ -1,6 +1,7 @@
 'use client'
 
 import { cn } from '@/lib/utils'
+import { useBlobUrl } from '@/hooks/useBlobUrl'
 
 interface AvatarProps {
   name?: string
@@ -64,14 +65,15 @@ const getInitial = (name: string): string => {
 export function Avatar({ name = '', src, size = 'md', className, bgColor }: AvatarProps) {
   const sizeClass = sizeMap[size]
   const colorClass = bgColor || getColorFromName(name)
+  const resolvedSrc = useBlobUrl(src)
   
-  if (src) {
+  if (resolvedSrc) {
     return (
       <div 
         className={cn(sizeClass, 'overflow-hidden flex-shrink-0', className)}
         style={{ borderRadius: 'var(--theme-radius-avatar)' }}
       >
-        <img src={src} alt={name} className="w-full h-full object-cover" />
+        <img src={resolvedSrc} alt={name} className="w-full h-full object-cover" />
       </div>
     )
   }

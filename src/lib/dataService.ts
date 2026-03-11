@@ -8,6 +8,7 @@ import { CURRENT_VERSION, STORAGE_KEY } from '@/types/appData'
 import { DEFAULT_APP_DATA, createDefaultAppData } from './defaults'
 import { validateAppData, isValidAppData } from './dataValidator'
 import { migrate, needsMigration, hasLegacyData, migrateFromLegacyFormat, cleanupLegacyStorage } from './migrationService'
+import { saveBlobSync, isBase64Data, isBlobRef, getBlob, clearAllBlobs } from './blobStore'
 
 // ============ 核心方法 ============
 
@@ -78,8 +79,48 @@ export function save(data: AppData): boolean {
       ...data,
       lastUpdated: new Date().toISOString(),
     }
-    
+
+    // 将 base64 大数据转存到 IndexedDB，localStorage 只保存引用
+    // saveBlobSync 同步返回确定性 key（同一份数据永远同一个 key），IndexedDB 后台写入
+    if (toSave.personas) {
+      toSave.personas = toSave.personas.map(persona => {
+        const p = { ...persona }
+        if (isBase64Data(p.avatar)) {
+          p.avatar = saveBlobSync(p.avatar!)
+        }
+        p.messages = p.messages.map(msg => {
+          if (isBase64Data(msg.image) || isBase64Data(msg.audio)) {
+            const cleaned = { ...msg }
+            if (isBase64Data(cleaned.image)) {
+              cleaned.image = saveBlobSync(cleaned.image!)
+            }
+            if (isBase64Data(cleaned.audio)) {
+              cleaned.audio = saveBlobSync(cleaned.audio!)
+            }
+            return cleaned
+          }
+          return msg
+        })
+        return p
+      })
+    }
+
+    // 处理 config 中的 base64（背景图、头像）
+    const ui = toSave.config?.user
+    if (ui) {
+      if (isBase64Data(ui.backgroundImage)) {
+        ui.backgroundImage = saveBlobSync(ui.backgroundImage!)
+      }
+      if (isBase64Data(ui.avatar)) {
+        ui.avatar = saveBlobSync(ui.avatar)
+      }
+      if (isBase64Data(ui.aiAvatar)) {
+        ui.aiAvatar = saveBlobSync(ui.aiAvatar)
+      }
+    }
+
     localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave))
+    
     return true
   } catch (error) {
     console.error('[DataService] 保存数据失败:', error)
@@ -102,7 +143,7 @@ export function save(data: AppData): boolean {
  * 导出数据为 JSON 字符串
  * @param includeApiKey 是否包含 API Key（默认不包含）
  */
-export function exportToJson(includeApiKey: boolean = false): string {
+export async function exportToJson(includeApiKey: boolean = false): Promise<string> {
   const data = load()
   
   const exportData: AppData = {
@@ -130,6 +171,9 @@ export function exportToJson(includeApiKey: boolean = false): string {
     }
   }
   
+  // 还原 blob 引用为 base64（导出包含完整图片/语音）
+  await resolveBlobRefs(exportData)
+  
   return JSON.stringify(exportData, null, 2)
 }
 
@@ -144,8 +188,8 @@ export function generateExportFilename(): string {
 /**
  * 触发文件下载
  */
-export function downloadExport(includeApiKey: boolean = false): void {
-  const json = exportToJson(includeApiKey)
+export async function downloadExport(includeApiKey: boolean = false): Promise<void> {
+  const json = await exportToJson(includeApiKey)
   const blob = new Blob([json], { type: 'application/json' })
   const url = URL.createObjectURL(blob)
   
@@ -288,6 +332,9 @@ export function clearAll(): void {
     // 清除旧格式数据
     cleanupLegacyStorage()
     
+    // 清除 IndexedDB blob 数据
+    clearAllBlobs().catch(() => {})
+    
     // 保存默认数据
     save(createDefaultAppData())
     
@@ -298,6 +345,51 @@ export function clearAll(): void {
 }
 
 // ============ 导出单例 ============
+
+/**
+ * 还原 AppData 中所有 blob 引用为 base64 数据
+ */
+export async function resolveBlobRefs(data: AppData): Promise<void> {
+  const tasks: Promise<void>[] = []
+
+  // 还原消息中的 blob 引用
+  for (const persona of data.personas) {
+    // persona 头像
+    if (isBlobRef(persona.avatar)) {
+      const ref = persona.avatar!
+      tasks.push(getBlob(ref).then(val => { if (val) persona.avatar = val }))
+    }
+    for (const msg of persona.messages) {
+      if (isBlobRef(msg.image)) {
+        const ref = msg.image!
+        tasks.push(getBlob(ref).then(val => { if (val) msg.image = val }))
+      }
+      if (isBlobRef(msg.audio)) {
+        const ref = msg.audio!
+        tasks.push(getBlob(ref).then(val => { if (val) msg.audio = val }))
+      }
+    }
+  }
+
+  // 还原 config 中的 blob 引用（背景图、头像）
+  const ui = data.config?.user
+  if (ui) {
+    if (isBlobRef(ui.backgroundImage)) {
+      const ref = ui.backgroundImage!
+      tasks.push(getBlob(ref).then(val => { if (val) ui.backgroundImage = val }))
+    }
+    if (isBlobRef(ui.avatar)) {
+      const ref = ui.avatar
+      tasks.push(getBlob(ref).then(val => { if (val) ui.avatar = val }))
+    }
+    if (isBlobRef(ui.aiAvatar)) {
+      const ref = ui.aiAvatar
+      tasks.push(getBlob(ref).then(val => { if (val) ui.aiAvatar = val }))
+    }
+  }
+
+  await Promise.all(tasks)
+}
 
 export const dataService = {
   load,
