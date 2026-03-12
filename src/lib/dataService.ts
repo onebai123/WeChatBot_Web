@@ -140,6 +140,84 @@ export function save(data: AppData): boolean {
 // ============ 导出功能 ============
 
 /**
+ * 紧急轻量导出：直接从 localStorage 读取，剥掉所有图片/音频 base64 数据
+ * 用于页面崩溃时抢救文字记录，不依赖 Store 初始化
+ */
+export function exportLightweightJson(): string | null {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (!raw) return null
+
+    const data = JSON.parse(raw)
+
+    // 清理 personas 中的图片/音频
+    if (Array.isArray(data.personas)) {
+      for (const persona of data.personas) {
+        if (persona.avatar && (isBase64Data(persona.avatar) || isBlobRef(persona.avatar))) {
+          persona.avatar = ''
+        }
+        if (Array.isArray(persona.messages)) {
+          for (const msg of persona.messages) {
+            if (msg.image && (isBase64Data(msg.image) || isBlobRef(msg.image))) {
+              msg.image = '[图片已移除]'
+            }
+            if (msg.audio && (isBase64Data(msg.audio) || isBlobRef(msg.audio))) {
+              msg.audio = '[语音已移除]'
+            }
+          }
+        }
+      }
+    }
+
+    // 清理 config 中的图片
+    const ui = data.config?.user
+    if (ui) {
+      if (ui.backgroundImage && (isBase64Data(ui.backgroundImage) || isBlobRef(ui.backgroundImage))) {
+        ui.backgroundImage = ''
+      }
+      if (ui.avatar && (isBase64Data(ui.avatar) || isBlobRef(ui.avatar))) {
+        ui.avatar = ''
+      }
+      if (ui.aiAvatar && (isBase64Data(ui.aiAvatar) || isBlobRef(ui.aiAvatar))) {
+        ui.aiAvatar = ''
+      }
+    }
+
+    // 清理 API Key
+    if (data.config?.api) data.config.api.apiKey = ''
+    if (data.config?.vision) data.config.vision.apiKey = ''
+    if (data.config?.onlineSearch) data.config.onlineSearch.apiKey = ''
+
+    return JSON.stringify(data, null, 2)
+  } catch {
+    // 最后的兜底：直接返回原始字符串
+    try {
+      return localStorage.getItem(STORAGE_KEY)
+    } catch {
+      return null
+    }
+  }
+}
+
+/**
+ * 紧急导出下载（不含图片）
+ */
+export function downloadLightweightExport(): void {
+  const json = exportLightweightJson()
+  if (!json) return
+
+  const blob = new Blob([json], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `wechatbot-emergency-${new Date().toISOString().slice(0, 10)}.json`
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
+
+/**
  * 导出数据为 JSON 字符串
  * @param includeApiKey 是否包含 API Key（默认不包含）
  */
@@ -395,6 +473,8 @@ export const dataService = {
   load,
   save,
   exportToJson,
+  exportLightweightJson,
+  downloadLightweightExport,
   generateExportFilename,
   downloadExport,
   importFromJson,

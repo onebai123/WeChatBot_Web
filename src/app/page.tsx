@@ -19,6 +19,7 @@ export default function Home() {
   const [mounted, setMounted] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
+  const [initError, setInitError] = useState<Error | null>(null)
   
   // 小手机模式：PC端也使用移动端布局
   const isMobileLayout = isMobile || phoneMode
@@ -29,10 +30,20 @@ export default function Home() {
   
   // 客户端挂载后初始化 Store 并渲染动态内容
   useEffect(() => {
-    initializeStores()
-    setupAutoSave()
-    setMounted(true)
+    try {
+      initializeStores()
+      setupAutoSave()
+      setMounted(true)
+    } catch (e) {
+      console.error('[Home] 初始化失败:', e)
+      setInitError(e instanceof Error ? e : new Error(String(e)))
+    }
   }, [])
+
+  // 初始化失败时抛出错误，由 error.tsx 接管渲染
+  if (initError) {
+    throw initError
+  }
   const lockTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const LOCK_TIMEOUT = (lockScreenConfig?.timeout || 60) * 1000 // 无操作自动锁屏
   
