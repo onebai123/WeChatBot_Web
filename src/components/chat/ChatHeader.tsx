@@ -57,7 +57,7 @@ export function ChatHeader({
   const displayTitle = activePersona?.name || title
 
   return (
-    <header className="bg-[var(--theme-header-bg)] border-b border-[var(--theme-border)]">
+    <header className="bg-[var(--theme-header-bg)] border-b border-[var(--theme-border)] flex-shrink-0 z-10">
       {/* 手机端布局 - 标题居中 (< 640px) */}
       <div className="flex sm:hidden items-center h-12 px-3 relative">
         {/* 左侧返回按钮 */}

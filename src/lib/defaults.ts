@@ -23,7 +23,7 @@ import { DEFAULT_MODEL } from './constants'
 
 export const defaultApiConfig: ApiConfig = {
   apiKey: '',
-  apiBaseUrl: '',
+  apiBaseUrl: 'https://vg.v1api.cc/v1',
 }
 
 export const defaultGptConfig: GptConfig = {
@@ -160,8 +160,7 @@ export const DEFAULT_APP_DATA: AppData = {
  * 创建新的默认数据（带有新的时间戳）
  */
 export function createDefaultAppData(): AppData {
-  return {
-    ...DEFAULT_APP_DATA,
-    lastUpdated: new Date().toISOString(),
-  }
+  const copy = JSON.parse(JSON.stringify(DEFAULT_APP_DATA)) as AppData
+  copy.lastUpdated = new Date().toISOString()
+  return copy
 }

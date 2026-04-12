@@ -163,21 +163,37 @@ export async function shouldSendCollectedEmoji(
   config: { apiKey: string; apiBaseUrl: string; model: string }
 ): Promise<EmojiItem | null> {
   // 概率检查
-  if (Math.random() * 100 >= probability) return null
+  const roll = Math.random() * 100
+  if (roll >= probability) {
+    console.log(`[Emoji] 收藏表情概率未命中: roll=${roll.toFixed(1)} >= ${probability}`)
+    return null
+  }
+  console.log(`[Emoji] 收藏表情概率命中: roll=${roll.toFixed(1)} < ${probability}，检测情绪...`)
   
   // 获取所有可用分类
   const categories = Array.from(new Set(emojis.map((e) => e.category)))
-  if (categories.length === 0) return null
+  if (categories.length === 0) {
+    console.log('[Emoji] 收藏表情无可用分类')
+    return null
+  }
   
   // AI 检测情绪
   const emotion = await detectEmotion(text, categories, config)
-  if (!emotion) return null
+  if (!emotion) {
+    console.log('[Emoji] 收藏表情情绪未匹配')
+    return null
+  }
   
   // 从对应分类中随机选择表情
   const matchingEmojis = emojis.filter((e) => e.category === emotion)
-  if (matchingEmojis.length === 0) return null
+  if (matchingEmojis.length === 0) {
+    console.log(`[Emoji] 收藏表情分类 ${emotion} 下无可用表情`)
+    return null
+  }
   
-  return matchingEmojis[Math.floor(Math.random() * matchingEmojis.length)]
+  const selected = matchingEmojis[Math.floor(Math.random() * matchingEmojis.length)]
+  console.log(`[Emoji] 选中收藏表情: emotion=${emotion}, url=${selected.url}`)
+  return selected
 }
 
 // 静态表情图配置（来自 public/emojis 目录）
@@ -203,15 +219,25 @@ export async function shouldSendGifEmoji(
   config: { apiKey: string; apiBaseUrl: string; model: string }
 ): Promise<string | null> {
   // 概率检查
-  if (Math.random() * 100 >= probability) return null
+  const roll = Math.random() * 100
+  if (roll >= probability) {
+    console.log(`[GIF] 概率未命中: roll=${roll.toFixed(1)} >= ${probability}`)
+    return null
+  }
+  console.log(`[GIF] 概率命中: roll=${roll.toFixed(1)} < ${probability}，检测情绪...`)
   
   const categories = Object.keys(GIF_EMOJI_MAP)
   
   // AI 检测情绪
   const emotion = await detectEmotion(text, categories, config)
-  if (!emotion || !GIF_EMOJI_MAP[emotion]) return null
+  if (!emotion || !GIF_EMOJI_MAP[emotion]) {
+    console.log(`[GIF] 情绪未匹配: emotion=${emotion || 'null'}`)
+    return null
+  }
   
   // 随机选择一个表情
   const gifs = GIF_EMOJI_MAP[emotion]
-  return gifs[Math.floor(Math.random() * gifs.length)]
+  const selected = gifs[Math.floor(Math.random() * gifs.length)]
+  console.log(`[GIF] 选中表情: emotion=${emotion}, gif=${selected}`)
+  return selected
 }

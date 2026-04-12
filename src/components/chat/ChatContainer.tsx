@@ -42,7 +42,7 @@ export function ChatContainer({ onMenuClick, showMenuButton, onLock }: ChatConta
     personas, activePersonaId, setActive,
     addMessage, updateMessage, recallMessage, clearMessages 
   } = usePersonaStore()
-  const { addTempLog, addCoreMemory, clearTempLogs, getTopCoreMemories, getCoreMemoriesByPersonaId, deleteCoreMemory } = useMemoryStore()
+  const { addTempLog, getTempLogs, addCoreMemory, clearTempLogs, getTopCoreMemories, getCoreMemoriesByPersonaId, deleteCoreMemory } = useMemoryStore()
   
   const [loading, setLoading] = useState(false)
   const [showPersona, setShowPersona] = useState(false)
@@ -249,7 +249,7 @@ export function ChatContainer({ onMenuClick, showMenuButton, onLock }: ChatConta
 
     // 构建系统消息（包含核心记忆）
     let systemMessage = persona?.content || gptConfig.systemMessage
-    const coreMemories = getTopCoreMemories(activePersonaId, 10)
+    const coreMemories = getTopCoreMemories(activePersonaId)
     if (coreMemories.length > 0) {
       const memoryText = coreMemories.map(m => {
         const date = new Date(m.createdAt).toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
@@ -587,27 +587,25 @@ export function ChatContainer({ onMenuClick, showMenuButton, onLock }: ChatConta
       return
     }
 
-    const unorganizedMessages = messages.filter(
-      (m) => !m.isTickle && !m.isRecalled && m.text?.trim()
-    )
+    const tempLogs = getTempLogs(activePersonaId)
 
-    if (unorganizedMessages.length < 5) {
+    if (tempLogs.length < 5) {
       showToast('消息太少，无需整理')
       return
     }
 
     showToast('正在整理记忆...')
-    memoryLog.info(`开始记忆整理, 消息数: ${unorganizedMessages.length}`)
+    memoryLog.info(`开始记忆整理, 临时记忆条数: ${tempLogs.length}`)
 
     try {
       const persona = personas.find(p => p.id === activePersonaId)
       const roleName = persona?.name || 'AI'
 
       const result = await organizeMemory({
-        messages: unorganizedMessages.map((m) => ({
-          role: m.inversion ? 'user' : 'assistant',
-          content: m.text,
-          dateTime: m.dateTime,
+        messages: tempLogs.map((log) => ({
+          role: log.role === 'user' ? 'user' : 'assistant',
+          content: log.content,
+          dateTime: log.timestamp,
         })),
         roleName,
         apiKey: apiConfig.apiKey,
@@ -780,7 +778,7 @@ export function ChatContainer({ onMenuClick, showMenuButton, onLock }: ChatConta
   }
 
   return (
-    <div className="flex-1 flex flex-col bg-[var(--theme-chat-bg)] relative">
+    <div className="flex-1 flex flex-col bg-[var(--theme-chat-bg)] relative min-h-0">
       <ChatHeader
         title={currentPersona.name}
         onOpenPersona={() => setShowPersona(true)}

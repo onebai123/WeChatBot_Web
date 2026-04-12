@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import type { AppMemories, CoreMemoryV2, TempMemoryV2 } from '@/types/appData'
 
 const MAX_CORE_MEMORIES = 50
-const MAX_TEMP_LOGS = 30
+const MAX_TEMP_LOGS = 60
 
 import type { TempMemoryLog } from '@/types'
 
