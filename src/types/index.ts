@@ -13,6 +13,11 @@ export interface Message {
   image?: string            // 图片 base64
   audio?: string            // 语音 base64
   audioDuration?: number    // 语音时长（秒）
+  replyTo?: {               // 引用回复
+    id: string
+    text: string
+    isUser: boolean
+  }
 }
 
 /** 会话类型 */

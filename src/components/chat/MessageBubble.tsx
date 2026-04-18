@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef } from 'react'
-import { User, MoreHorizontal, RotateCcw, Bot, Play, Pause } from 'lucide-react'
+import { User, MoreHorizontal, RotateCcw, Bot, Play, Pause, Reply, Copy, Check } from 'lucide-react'
 import type { Message } from '@/types'
 import { cn } from '@/lib/utils'
 import { usePersonaStore } from '@/store/personaStore'
@@ -70,9 +70,12 @@ interface MessageBubbleProps {
   personaId: string
   onTickle?: (target: 'ai' | 'user') => void
   onClearMemory?: () => void
+  onReply?: (message: Message) => void
+  searchQuery?: string
+  isSearchMatch?: boolean
 }
 
-export function MessageBubble({ message, personaId, onTickle, onClearMemory }: MessageBubbleProps) {
+export function MessageBubble({ message, personaId, onTickle, onClearMemory, onReply, searchQuery, isSearchMatch }: MessageBubbleProps) {
   const { recallMessage, personas } = usePersonaStore()
   const { userInfo } = useConfigStore()
   const { theme } = useThemeStore()
@@ -153,6 +156,8 @@ export function MessageBubble({ message, personaId, onTickle, onClearMemory }: M
     )
   }
 
+  const [copied, setCopied] = useState(false)
+
   const handleRecall = () => {
     if (isUser) {
       recallMessage(personaId, message.id)
@@ -160,12 +165,36 @@ export function MessageBubble({ message, personaId, onTickle, onClearMemory }: M
     setShowMenu(false)
   }
 
+  const handleCopy = () => {
+    if (message.text) {
+      navigator.clipboard.writeText(message.text)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    }
+    setShowMenu(false)
+  }
+
+  const handleReply = () => {
+    onReply?.(message)
+    setShowMenu(false)
+  }
+
+  // 高亮搜索匹配文本
+  const highlightText = (text: string) => {
+    if (!searchQuery) return text
+    const regex = new RegExp(`(${searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi')
+    const parts = text.split(regex)
+    return parts.map((part, i) =>
+      regex.test(part) ? <mark key={i} className="bg-yellow-300 text-black rounded-sm px-0.5">{part}</mark> : part
+    )
+  }
+
   // 解析消息，处理换行符 \
   const renderText = (text: string) => {
     const parts = text.split(/\\+n?/)
     return parts.map((part, index) => (
       <span key={index}>
-        {part.trim()}
+        {highlightText(part.trim())}
         {index < parts.length - 1 && <br />}
       </span>
     ))
@@ -174,8 +203,9 @@ export function MessageBubble({ message, personaId, onTickle, onClearMemory }: M
   return (
     <div
       className={cn(
-        'flex items-start gap-2.5 px-3 py-1.5 message-bubble group',
-        isUser ? 'flex-row-reverse' : 'flex-row'
+        'flex items-start gap-2.5 px-3 py-1.5 message-bubble group transition-colors',
+        isUser ? 'flex-row-reverse' : 'flex-row',
+        isSearchMatch && 'bg-yellow-100/50 dark:bg-yellow-900/20'
       )}
     >
       {/* 头像 */}
@@ -204,6 +234,18 @@ export function MessageBubble({ message, personaId, onTickle, onClearMemory }: M
 
       {/* 消息内容 */}
       <div className="relative max-w-[70%]">
+        {/* 引用回复气泡 */}
+        {message.replyTo && (
+          <div className={cn(
+            'mb-1 px-3 py-1.5 rounded-lg text-xs border-l-2 cursor-pointer hover:opacity-80',
+            'bg-[var(--theme-border)]/30 border-[var(--theme-text-muted)]/50 text-[var(--theme-text-muted)]'
+          )}>
+            <span className="font-medium text-[var(--theme-text-secondary)]">
+              {message.replyTo.isUser ? '你' : persona?.name || 'AI'}
+            </span>
+            <p className="truncate mt-0.5">{message.replyTo.text}</p>
+          </div>
+        )}
         {/* 语音消息 */}
         {resolvedAudio ? (
           <VoiceMessage audio={resolvedAudio} duration={message.audioDuration || 0} isUser={isUser} />
@@ -271,27 +313,52 @@ export function MessageBubble({ message, personaId, onTickle, onClearMemory }: M
         )}
 
         {/* 操作菜单 */}
-        {isUser && (
-          <div className="absolute -left-8 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
-            <button
-              onClick={() => setShowMenu(!showMenu)}
-              className="p-1 hover:bg-[var(--theme-border)]/50 rounded"
-            >
-              <MoreHorizontal className="w-4 h-4 text-[var(--theme-text-muted)]" />
-            </button>
-            {showMenu && (
-              <div className="absolute right-0 top-full mt-1 bg-[var(--theme-chat-bg)] rounded-lg shadow-lg border border-[var(--theme-border)] py-1 z-10">
+        <div className={cn(
+          'absolute top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity',
+          isUser ? '-left-8' : '-right-8'
+        )}>
+          <button
+            onClick={() => setShowMenu(!showMenu)}
+            className="p-1 hover:bg-[var(--theme-border)]/50 rounded"
+          >
+            <MoreHorizontal className="w-4 h-4 text-[var(--theme-text-muted)]" />
+          </button>
+          {showMenu && (
+            <>
+              <div className="fixed inset-0 z-10" onClick={() => setShowMenu(false)} />
+              <div className={cn(
+                'absolute top-full mt-1 bg-[var(--theme-chat-bg)] rounded-lg shadow-lg border border-[var(--theme-border)] py-1 z-20 min-w-[100px]',
+                isUser ? 'right-0' : 'left-0'
+              )}>
+                {onReply && (
+                  <button
+                    onClick={handleReply}
+                    className="flex items-center gap-2 px-3 py-1.5 text-sm text-[var(--theme-text-secondary)] hover:bg-[var(--theme-border)]/50 w-full"
+                  >
+                    <Reply className="w-3.5 h-3.5" />
+                    回复
+                  </button>
+                )}
                 <button
-                  onClick={handleRecall}
+                  onClick={handleCopy}
                   className="flex items-center gap-2 px-3 py-1.5 text-sm text-[var(--theme-text-secondary)] hover:bg-[var(--theme-border)]/50 w-full"
                 >
-                  <RotateCcw className="w-3.5 h-3.5" />
-                  撤回
+                  {copied ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
+                  {copied ? '已复制' : '复制'}
                 </button>
+                {isUser && (
+                  <button
+                    onClick={handleRecall}
+                    className="flex items-center gap-2 px-3 py-1.5 text-sm text-[var(--theme-text-secondary)] hover:bg-[var(--theme-border)]/50 w-full"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    撤回
+                  </button>
+                )}
               </div>
-            )}
-          </div>
-        )}
+            </>
+          )}
+        </div>
 
         {/* 时间戳 - 默认隐藏，hover 显示 */}
         <div className={cn(

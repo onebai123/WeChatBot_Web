@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Settings, User, ChevronDown, ChevronLeft, Upload, Download, Palette, MoreHorizontal, FileText, Lock, HelpCircle, Eraser, Trash2, RotateCcw, MessageSquareX, Smartphone, Monitor, Check, Brain } from 'lucide-react'
+import { Settings, User, ChevronDown, ChevronLeft, Upload, Download, Palette, MoreHorizontal, FileText, Lock, HelpCircle, Eraser, Trash2, RotateCcw, MessageSquareX, Smartphone, Monitor, Check, Brain, Search, FileDown } from 'lucide-react'
 import { usePersonaStore } from '@/store/personaStore'
 import { useConfigStore } from '@/store/configStore'
 import { useThemeStore } from '@/store/themeStore'
@@ -16,6 +16,9 @@ interface ChatHeaderProps {
   onOpenImport?: () => void
   onOpenExport?: () => void
   onOrganizeMemory?: () => void
+  onOpenMemory?: () => void
+  onOpenSearch?: () => void
+  onExportChat?: (format: 'txt' | 'md') => void
   onClearScreen?: () => void
   onClearTempMemory?: () => void
   onClearCoreMemory?: () => void
@@ -33,6 +36,9 @@ export function ChatHeader({
   onOpenImport,
   onOpenExport,
   onOrganizeMemory,
+  onOpenMemory,
+  onOpenSearch,
+  onExportChat,
   onClearScreen,
   onClearTempMemory,
   onClearCoreMemory,
@@ -48,6 +54,7 @@ export function ChatHeader({
   const [showMore, setShowMore] = useState(false)
   const [showClearMenu, setShowClearMenu] = useState(false)
   const [showThemeMenu, setShowThemeMenu] = useState(false)
+  const [showExportMenu, setShowExportMenu] = useState(false)
   const { theme, setTheme } = useThemeStore()
   const { phoneMode, setPhoneMode } = useConfigStore()
 
@@ -126,7 +133,37 @@ export function ChatHeader({
                   </div>
                   <span className="text-xs text-[var(--theme-text-secondary)]">主题</span>
                 </button>
-                {/* 6. 清理 */}
+                {/* 6. 搜索 */}
+                {onOpenSearch && (
+                  <button onClick={() => { onOpenSearch(); setShowMore(false); }}
+                    className="flex flex-col items-center gap-2 p-3 rounded-xl hover:bg-[var(--theme-border)]/50 active:bg-[var(--theme-border)]">
+                    <div className="w-12 h-12 rounded-xl bg-cyan-500 flex items-center justify-center">
+                      <Search className="w-6 h-6 text-white" />
+                    </div>
+                    <span className="text-xs text-[var(--theme-text-secondary)]">搜索</span>
+                  </button>
+                )}
+                {/* 7. 导出聊天 */}
+                {onExportChat && (
+                  <button onClick={() => { setShowExportMenu(true); setShowMore(false); }}
+                    className="flex flex-col items-center gap-2 p-3 rounded-xl hover:bg-[var(--theme-border)]/50 active:bg-[var(--theme-border)]">
+                    <div className="w-12 h-12 rounded-xl bg-teal-500 flex items-center justify-center">
+                      <FileDown className="w-6 h-6 text-white" />
+                    </div>
+                    <span className="text-xs text-[var(--theme-text-secondary)]">导出</span>
+                  </button>
+                )}
+                {/* 8. 记忆 */}
+                {onOpenMemory && (
+                  <button onClick={() => { onOpenMemory(); setShowMore(false); }}
+                    className="flex flex-col items-center gap-2 p-3 rounded-xl hover:bg-[var(--theme-border)]/50 active:bg-[var(--theme-border)]">
+                    <div className="w-12 h-12 rounded-xl bg-purple-500 flex items-center justify-center">
+                      <Brain className="w-6 h-6 text-white" />
+                    </div>
+                    <span className="text-xs text-[var(--theme-text-secondary)]">记忆</span>
+                  </button>
+                )}
+                {/* 7. 清理 */}
                 {hasClearOptions && (
                   <button onClick={() => { setShowClearMenu(true); setShowMore(false); }}
                     className="flex flex-col items-center gap-2 p-3 rounded-xl hover:bg-[var(--theme-border)]/50 active:bg-[var(--theme-border)]">
@@ -184,6 +221,24 @@ export function ChatHeader({
             <button onClick={onOpenImport} className="flex flex-col items-center px-2 py-1 hover:bg-[var(--theme-border)]/50 rounded">
               <Upload className="w-4 h-4 text-[var(--theme-text-secondary)]" />
               <span className="text-[10px] text-[var(--theme-text-muted)]">导入</span>
+            </button>
+          )}
+          {onOpenSearch && (
+            <button onClick={onOpenSearch} className="flex flex-col items-center px-2 py-1 hover:bg-[var(--theme-border)]/50 rounded">
+              <Search className="w-4 h-4 text-cyan-500" />
+              <span className="text-[10px] text-[var(--theme-text-muted)]">搜索</span>
+            </button>
+          )}
+          {onExportChat && (
+            <button onClick={() => setShowExportMenu(true)} className="flex flex-col items-center px-2 py-1 hover:bg-[var(--theme-border)]/50 rounded">
+              <FileDown className="w-4 h-4 text-teal-500" />
+              <span className="text-[10px] text-[var(--theme-text-muted)]">导出</span>
+            </button>
+          )}
+          {onOpenMemory && (
+            <button onClick={onOpenMemory} className="flex flex-col items-center px-2 py-1 hover:bg-[var(--theme-border)]/50 rounded">
+              <Brain className="w-4 h-4 text-purple-500" />
+              <span className="text-[10px] text-[var(--theme-text-muted)]">记忆</span>
             </button>
           )}
           <button onClick={() => setShowThemeMenu(true)} className="flex flex-col items-center px-2 py-1 hover:bg-[var(--theme-border)]/50 rounded">
@@ -369,6 +424,47 @@ export function ChatHeader({
               className="w-full mt-4 py-2 text-sm text-[var(--theme-text-secondary)] hover:bg-[var(--theme-border)]/50 rounded-lg transition-colors"
             >
               关闭
+            </button>
+          </div>
+        </>
+      )}
+      {/* 导出聊天格式选择弹窗 */}
+      {showExportMenu && onExportChat && (
+        <>
+          <div className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm" onClick={() => setShowExportMenu(false)} />
+          <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 bg-[var(--theme-chat-bg)] rounded-2xl p-5 w-[280px] shadow-xl border border-[var(--theme-border)]">
+            <h3 className="text-lg font-medium text-[var(--theme-text-primary)] mb-4 text-center">导出聊天记录</h3>
+            <div className="space-y-2">
+              <button
+                onClick={() => { onExportChat('txt'); setShowExportMenu(false); }}
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-[var(--theme-border)]/50 transition-colors"
+              >
+                <div className="w-10 h-10 rounded-xl bg-teal-500 flex items-center justify-center">
+                  <FileText className="w-5 h-5 text-white" />
+                </div>
+                <div className="text-left">
+                  <div className="text-sm font-medium text-[var(--theme-text-primary)]">纯文本 (.txt)</div>
+                  <div className="text-xs text-[var(--theme-text-muted)]">简洁格式，方便阅读</div>
+                </div>
+              </button>
+              <button
+                onClick={() => { onExportChat('md'); setShowExportMenu(false); }}
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-[var(--theme-border)]/50 transition-colors"
+              >
+                <div className="w-10 h-10 rounded-xl bg-indigo-500 flex items-center justify-center">
+                  <FileDown className="w-5 h-5 text-white" />
+                </div>
+                <div className="text-left">
+                  <div className="text-sm font-medium text-[var(--theme-text-primary)]">Markdown (.md)</div>
+                  <div className="text-xs text-[var(--theme-text-muted)]">富格式，支持引用和粗体</div>
+                </div>
+              </button>
+            </div>
+            <button
+              onClick={() => setShowExportMenu(false)}
+              className="w-full mt-4 py-2 text-sm text-[var(--theme-text-secondary)] hover:bg-[var(--theme-border)]/50 rounded-lg transition-colors"
+            >
+              取消
             </button>
           </div>
         </>

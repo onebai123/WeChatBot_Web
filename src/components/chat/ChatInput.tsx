@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { Send, Smile, Image as ImageIcon, Mic, Hand, X, MicOff } from 'lucide-react'
+import { Send, Smile, Image as ImageIcon, Mic, Hand, X, MicOff, Reply } from 'lucide-react'
+import type { Message } from '@/types'
 import { cn } from '@/lib/utils'
 import { fileToBase64, compressImage } from '@/lib/vision'
 
@@ -38,6 +39,8 @@ interface ChatInputProps {
   onTickle?: () => void
   disabled?: boolean
   visionEnabled?: boolean
+  replyTo?: Message | null
+  onCancelReply?: () => void
 }
 
 // 表情面板分类
@@ -62,7 +65,7 @@ const GIF_EMOJIS: Record<string, string[]> = {
   '提醒': ['/emojis/reminded/1.gif', '/emojis/reminded/2.gif'],
 }
 
-export function ChatInput({ onSend, onSendVoice, onTickle, disabled, visionEnabled }: ChatInputProps) {
+export function ChatInput({ onSend, onSendVoice, onTickle, disabled, visionEnabled, replyTo, onCancelReply }: ChatInputProps) {
   const [message, setMessage] = useState('')
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [showEmoji, setShowEmoji] = useState(false)
@@ -228,6 +231,22 @@ export function ChatInput({ onSend, onSendVoice, onTickle, disabled, visionEnabl
     <div
       className="bg-[var(--theme-header-bg)] border-t border-[var(--theme-border)] p-3 sm:p-4 lg:px-8 lg:py-5 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
     >
+      {/* 回复预览 */}
+      {replyTo && (
+        <div className="mb-2 flex items-center gap-2 px-3 py-2 bg-[var(--theme-border)]/30 rounded-lg border-l-2 border-[var(--theme-primary)]">
+          <Reply className="w-4 h-4 text-[var(--theme-primary)] flex-shrink-0" />
+          <div className="flex-1 min-w-0">
+            <span className="text-xs font-medium text-[var(--theme-primary)]">
+              {replyTo.inversion ? '你' : '对方'}
+            </span>
+            <p className="text-xs text-[var(--theme-text-muted)] truncate">{replyTo.text}</p>
+          </div>
+          <button onClick={onCancelReply} className="p-1 hover:bg-[var(--theme-border)]/50 rounded flex-shrink-0">
+            <X className="w-3.5 h-3.5 text-[var(--theme-text-muted)]" />
+          </button>
+        </div>
+      )}
+
       {/* 图片预览 */}
       {imagePreview && (
         <div className="mb-2 relative inline-block">

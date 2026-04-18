@@ -13,6 +13,7 @@ import { SettingsModal } from '../settings/SettingsModal'
 import { ImportModal } from '../settings/ImportModal'
 import { ExportModal } from '../settings/ExportModal'
 import { LogViewer } from '../settings/LogViewer'
+import { MemoryPanel } from '../settings/MemoryPanel'
 import { streamChatMessage } from '@/lib/api'
 import { generateTickleResponse, organizeMemory, shouldAutoOrganize } from '@/lib/memory'
 import { recognizeImage } from '@/lib/vision'
@@ -23,7 +24,7 @@ import { autoMessageTimer, generateAutoMessage, isInQuietTime } from '@/lib/auto
 import { shouldSendEmoji, suggestEmoji, appendEmoji, shouldSendGifEmoji } from '@/lib/emoji'
 import { chatLog, memoryLog, autoMsgLog, apiLog, tickleLog, emojiLog, autoMemoryLog } from '@/lib/logger'
 import { flushSave } from '@/store/init'
-import { Github, MessageCircle, Rocket } from 'lucide-react'
+import { Github, MessageCircle, Rocket, Search, X, ChevronUp, ChevronDown } from 'lucide-react'
 
 interface ChatContainerProps {
   onMenuClick?: () => void
@@ -51,7 +52,13 @@ export function ChatContainer({ onMenuClick, showMenuButton, onLock }: ChatConta
   const [showImport, setShowImport] = useState(false)
   const [showExport, setShowExport] = useState(false)
   const [showLogs, setShowLogs] = useState(false)
+  const [showMemory, setShowMemory] = useState(false)
+  const [showSearch, setShowSearch] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [currentMatchIndex, setCurrentMatchIndex] = useState(0)
+  const [replyingTo, setReplyingTo] = useState<import('@/types').Message | null>(null)
   const [showClearMenu, setShowClearMenu] = useState(false)
+  const messageRefs = useRef<Record<string, HTMLDivElement | null>>({})
   const [showHelp, setShowHelp] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -225,8 +232,10 @@ export function ChatContainer({ onMenuClick, showMenuButton, onLock }: ChatConta
       inversion: true,
       dateTime: new Date().toLocaleString('zh-CN'),
       error: false,
-      image: imageBase64,  // 存储图片
+      image: imageBase64,
+      ...(replyingTo ? { replyTo: { id: replyingTo.id, text: replyingTo.text?.slice(0, 100) || '', isUser: replyingTo.inversion } } : {}),
     })
+    setReplyingTo(null)
 
     // 记录临时记忆 - 用户消息
     addTempLog(activePersonaId, { role: 'user', content: userText })
@@ -677,6 +686,54 @@ export function ChatContainer({ onMenuClick, showMenuButton, onLock }: ChatConta
     }
   }
 
+  // 导出聊天记录
+  const handleExportChat = (format: 'txt' | 'md') => {
+    if (!activePersonaId) return
+    const persona = personas.find(p => p.id === activePersonaId)
+    const name = persona?.name || 'AI'
+    const userName = userInfo.name || '我'
+    const validMessages = messages.filter(m => !m.isRecalled && !m.loading)
+    if (validMessages.length === 0) {
+      showToast('暂无聊天记录')
+      return
+    }
+    const lines: string[] = []
+    if (format === 'md') {
+      lines.push(`# ${userName} 与 ${name} 的聊天记录\n`)
+      lines.push(`> 导出时间: ${new Date().toLocaleString('zh-CN')}\n`)
+      lines.push(`> 消息数: ${validMessages.length}\n`)
+      lines.push('---\n')
+    }
+    for (const m of validMessages) {
+      if (m.isMemoryDivider) {
+        lines.push(format === 'md' ? `\n---\n*📝 记忆已整理 · ${m.dateTime}*\n` : `\n--- 记忆已整理 · ${m.dateTime} ---\n`)
+        continue
+      }
+      if (m.isTickle) {
+        lines.push(format === 'md' ? `\n*👉 ${m.text}*\n` : `[拍一拍] ${m.text}\n`)
+        continue
+      }
+      const sender = m.inversion ? userName : name
+      const time = m.dateTime || ''
+      const replyPrefix = m.replyTo ? `[回复: ${m.replyTo.text?.slice(0, 30)}...] ` : ''
+      if (format === 'md') {
+        lines.push(`**${sender}** *(${time})*`)
+        if (m.replyTo) lines.push(`> ${m.replyTo.text?.slice(0, 80)}`)
+        lines.push(`${m.text || '[图片/语音]'}\n`)
+      } else {
+        lines.push(`${time} | ${sender}: ${replyPrefix}${m.text || '[图片/语音]'}`)
+      }
+    }
+    const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `chat_${name}_${new Date().toISOString().slice(0, 10)}.${format}`
+    a.click()
+    URL.revokeObjectURL(url)
+    showToast(`已导出为 ${format.toUpperCase()}`)
+  }
+
   // 初始化 - 重置所有数据
   const handleReset = () => {
     if (confirm('⚠️ 确定要初始化吗？\n\n这将清除当前角色的所有数据：\n- 聊天记录\n- 临时记忆\n- 核心记忆\n\n此操作不可恢复！')) {
@@ -790,11 +847,73 @@ export function ChatContainer({ onMenuClick, showMenuButton, onLock }: ChatConta
         onClearTempMemory={handleClearTempMemory}
         onClearCoreMemory={handleClearCoreMemory}
         onReset={handleReset}
+        onOpenMemory={() => setShowMemory(true)}
+        onOpenSearch={() => setShowSearch(s => !s)}
+        onExportChat={handleExportChat}
         onOpenLogs={() => setShowLogs(true)}
         onLock={onLock}
         onMenuClick={onMenuClick}
         showMenuButton={showMenuButton}
       />
+
+      {/* 搜索栏 */}
+      {showSearch && (
+        <div className="flex items-center gap-2 px-3 py-2 bg-[var(--theme-sidebar-bg)] border-b border-[var(--theme-border)] flex-shrink-0">
+          <Search className="w-4 h-4 text-[var(--theme-text-muted)] flex-shrink-0" />
+          <input
+            autoFocus
+            value={searchQuery}
+            onChange={e => { setSearchQuery(e.target.value); setCurrentMatchIndex(0); }}
+            placeholder="搜索聊天记录..."
+            className="flex-1 bg-transparent text-sm text-[var(--theme-text-primary)] placeholder:text-[var(--theme-text-muted)] outline-none"
+            onKeyDown={e => {
+              if (e.key === 'Enter') {
+                const matches = messages.filter(m => !m.isRecalled && !m.isTickle && !m.isMemoryDivider && m.text && searchQuery && m.text.toLowerCase().includes(searchQuery.toLowerCase()))
+                if (matches.length > 0) {
+                  const next = (currentMatchIndex + 1) % matches.length
+                  setCurrentMatchIndex(next)
+                  messageRefs.current[matches[next].id]?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                }
+              } else if (e.key === 'Escape') {
+                setShowSearch(false); setSearchQuery('');
+              }
+            }}
+          />
+          {searchQuery && (() => {
+            const matchCount = messages.filter(m => !m.isRecalled && !m.isTickle && !m.isMemoryDivider && m.text && m.text.toLowerCase().includes(searchQuery.toLowerCase())).length
+            return (
+              <span className="text-xs text-[var(--theme-text-muted)] whitespace-nowrap">
+                {matchCount > 0 ? `${currentMatchIndex + 1}/${matchCount}` : '无结果'}
+              </span>
+            )
+          })()}
+          <div className="flex items-center gap-0.5">
+            <button onClick={() => {
+              const matches = messages.filter(m => !m.isRecalled && !m.isTickle && !m.isMemoryDivider && m.text && searchQuery && m.text.toLowerCase().includes(searchQuery.toLowerCase()))
+              if (matches.length > 0) {
+                const prev = (currentMatchIndex - 1 + matches.length) % matches.length
+                setCurrentMatchIndex(prev)
+                messageRefs.current[matches[prev].id]?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+              }
+            }} className="p-1 hover:bg-[var(--theme-border)]/50 rounded">
+              <ChevronUp className="w-4 h-4 text-[var(--theme-text-secondary)]" />
+            </button>
+            <button onClick={() => {
+              const matches = messages.filter(m => !m.isRecalled && !m.isTickle && !m.isMemoryDivider && m.text && searchQuery && m.text.toLowerCase().includes(searchQuery.toLowerCase()))
+              if (matches.length > 0) {
+                const next = (currentMatchIndex + 1) % matches.length
+                setCurrentMatchIndex(next)
+                messageRefs.current[matches[next].id]?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+              }
+            }} className="p-1 hover:bg-[var(--theme-border)]/50 rounded">
+              <ChevronDown className="w-4 h-4 text-[var(--theme-text-secondary)]" />
+            </button>
+          </div>
+          <button onClick={() => { setShowSearch(false); setSearchQuery(''); }} className="p-1 hover:bg-[var(--theme-border)]/50 rounded">
+            <X className="w-4 h-4 text-[var(--theme-text-muted)]" />
+          </button>
+        </div>
+      )}
 
       {/* Toast 提示 */}
       {toast && (
@@ -880,14 +999,25 @@ export function ChatContainer({ onMenuClick, showMenuButton, onLock }: ChatConta
               messages[index - 1]?.dateTime,
               message.dateTime
             )
+            const isMatch = !!(searchQuery && message.text && !message.isRecalled && !message.isTickle && !message.isMemoryDivider && message.text.toLowerCase().includes(searchQuery.toLowerCase()))
+            const matchMessages = searchQuery ? messages.filter(m => !m.isRecalled && !m.isTickle && !m.isMemoryDivider && m.text && m.text.toLowerCase().includes(searchQuery.toLowerCase())) : []
+            const isCurrentMatch = isMatch && matchMessages[currentMatchIndex]?.id === message.id
             return (
-              <div key={message.id}>
+              <div key={message.id} ref={el => { messageRefs.current[message.id] = el }}>
                 {showTimeDivider && (
                   <div className="text-center text-xs text-[var(--theme-text-muted)] py-3">
                     {formatTimeDivider(message.dateTime)}
                   </div>
                 )}
-                <MessageBubble message={message} personaId={activePersonaId!} onTickle={handleTickle} onClearMemory={() => setShowClearMenu(true)} />
+                <MessageBubble
+                  message={message}
+                  personaId={activePersonaId!}
+                  onTickle={handleTickle}
+                  onClearMemory={() => setShowClearMenu(true)}
+                  onReply={(msg) => setReplyingTo(msg)}
+                  searchQuery={searchQuery || undefined}
+                  isSearchMatch={isCurrentMatch}
+                />
               </div>
             )
           })
@@ -901,6 +1031,8 @@ export function ChatContainer({ onMenuClick, showMenuButton, onLock }: ChatConta
         onTickle={handleTickle} 
         disabled={false}
         visionEnabled={visionConfig.enabled}
+        replyTo={replyingTo}
+        onCancelReply={() => setReplyingTo(null)}
       />
 
       {/* 人设抽屉 */}
@@ -921,6 +1053,9 @@ export function ChatContainer({ onMenuClick, showMenuButton, onLock }: ChatConta
 
       {/* 日志查看器 */}
       <LogViewer open={showLogs} onClose={() => setShowLogs(false)} />
+
+      {/* 记忆管理面板 */}
+      <MemoryPanel open={showMemory} onClose={() => setShowMemory(false)} />
 
       {/* 清理菜单弹窗（从错误消息中打开） */}
       {showClearMenu && (
