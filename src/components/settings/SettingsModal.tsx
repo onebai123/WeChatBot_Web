@@ -488,7 +488,7 @@ export function SettingsModal({ open, onClose, defaultTab }: SettingsModalProps)
                       <span className="text-sm text-[var(--theme-text-secondary)]">最大 Token</span>
                       <span className="text-sm font-medium text-violet-600 bg-violet-50 px-2 py-0.5 rounded">{gptConfig.maxTokens}</span>
                     </div>
-                    <input type="range" min="256" max="4096" step="256" value={gptConfig.maxTokens}
+                    <input type="range" min="1024" max="16384" step="1024" value={gptConfig.maxTokens}
                       onChange={(e) => setGptConfig({ maxTokens: Number(e.target.value) })} 
                       className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-violet-500" />
                   </div>

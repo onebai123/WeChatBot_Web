@@ -28,7 +28,7 @@ export const defaultApiConfig: ApiConfig = {
 
 export const defaultGptConfig: GptConfig = {
   model: DEFAULT_MODEL,
-  maxTokens: 3000,
+  maxTokens: 8192,
   systemMessage: '',
   temperature: 0.5,
   topP: 1,

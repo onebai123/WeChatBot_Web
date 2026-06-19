@@ -63,6 +63,14 @@ export async function sendChatMessage(params: SendChatParams): Promise<ChatRespo
   return { content }
 }
 
+/** 空回复错误（用于触发重试） */
+export class EmptyResponseError extends Error {
+  constructor() {
+    super('流式响应返回空内容')
+    this.name = 'EmptyResponseError'
+  }
+}
+
 /** 流式请求（可选） */
 export async function* streamChatMessage(params: SendChatParams): AsyncGenerator<string> {
   const { messages, model, maxTokens, temperature, apiKey, apiBaseUrl } = params
@@ -98,6 +106,7 @@ export async function* streamChatMessage(params: SendChatParams): AsyncGenerator
 
   const decoder = new TextDecoder()
   let buffer = ''
+  let hasContent = false
 
   while (true) {
     const { done, value } = await reader.read()
@@ -116,10 +125,17 @@ export async function* streamChatMessage(params: SendChatParams): AsyncGenerator
         const json = trimmed.slice(6)
         const parsed = JSON.parse(json)
         const content = parsed.choices?.[0]?.delta?.content
-        if (content) yield content
+        if (content) {
+          hasContent = true
+          yield content
+        }
       } catch {
         // 忽略解析错误的行
       }
     }
+  }
+
+  if (!hasContent) {
+    throw new EmptyResponseError()
   }
 }

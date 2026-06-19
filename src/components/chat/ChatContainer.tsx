@@ -14,7 +14,7 @@ import { ImportModal } from '../settings/ImportModal'
 import { ExportModal } from '../settings/ExportModal'
 import { LogViewer } from '../settings/LogViewer'
 import { MemoryPanel } from '../settings/MemoryPanel'
-import { streamChatMessage } from '@/lib/api'
+import { streamChatMessage, sendChatMessage, EmptyResponseError } from '@/lib/api'
 import { generateTickleResponse, organizeMemory, shouldAutoOrganize } from '@/lib/memory'
 import { recognizeImage } from '@/lib/vision'
 import { transcribeAudio } from '@/lib/speech'
@@ -311,10 +311,8 @@ export function ChatContainer({ onMenuClick, showMenuButton, onLock }: ChatConta
       const latestMessages = latestPersona?.messages || []
       const lastMsgId = latestMessages[latestMessages.length - 1]?.id
 
-      // 流式请求
-      apiLog.info(`调用 API: ${gptConfig.model}`, { url: apiConfig.apiBaseUrl })
-      let responseText = ''
-      const stream = streamChatMessage({
+      // 流式请求（空回复重试：第1次流式 → 第2次流式 → 第3次非流式兜底）
+      const chatParams = {
         messages: [
           ...(systemMessage ? [{ role: 'system', content: systemMessage }] : []),
           ...contextMessages,
@@ -325,15 +323,48 @@ export function ChatContainer({ onMenuClick, showMenuButton, onLock }: ChatConta
         temperature: gptConfig.temperature,
         apiKey: apiConfig.apiKey,
         apiBaseUrl: apiConfig.apiBaseUrl,
-      })
+      }
 
-      // 逐步接收流式内容
-      for await (const chunk of stream) {
-        responseText += chunk
-        updateMessage(activePersonaId, lastMsgId || '', {
-          text: responseText,
-          loading: true,
-        })
+      const MAX_STREAM_RETRIES = 2
+      let responseText = ''
+
+      // 阶段一：流式尝试（最多2次）
+      for (let attempt = 1; attempt <= MAX_STREAM_RETRIES; attempt++) {
+        apiLog.info(`调用 API [流式]: ${gptConfig.model} (第${attempt}次)`, { url: apiConfig.apiBaseUrl })
+        responseText = ''
+        const stream = streamChatMessage(chatParams)
+
+        try {
+          for await (const chunk of stream) {
+            responseText += chunk
+            updateMessage(activePersonaId, lastMsgId || '', {
+              text: responseText,
+              loading: true,
+            })
+          }
+          break
+        } catch (e) {
+          if (e instanceof EmptyResponseError && attempt < MAX_STREAM_RETRIES) {
+            apiLog.info(`流式空回复，第${attempt}次重试...`)
+            continue
+          }
+          if (e instanceof EmptyResponseError) {
+            // 阶段二：降级非流式兜底
+            apiLog.info('流式重试均为空回复，降级为非流式请求')
+            try {
+              const result = await sendChatMessage(chatParams)
+              responseText = result.content
+              updateMessage(activePersonaId, lastMsgId || '', {
+                text: responseText,
+                loading: true,
+              })
+            } catch (fallbackErr) {
+              throw fallbackErr
+            }
+            break
+          }
+          throw e
+        }
       }
       apiLog.info(`收到回复: ${responseText.length} 字符`)
 
