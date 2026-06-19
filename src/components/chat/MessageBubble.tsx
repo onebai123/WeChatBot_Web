@@ -80,6 +80,7 @@ export function MessageBubble({ message, personaId, onTickle, onClearMemory, onR
   const { userInfo } = useConfigStore()
   const { theme } = useThemeStore()
   const [showMenu, setShowMenu] = useState(false)
+  const [copied, setCopied] = useState(false)
   const isUser = message.inversion
   const showArrow = theme.style.bubbleArrow
 
@@ -156,7 +157,6 @@ export function MessageBubble({ message, personaId, onTickle, onClearMemory, onR
     )
   }
 
-  const [copied, setCopied] = useState(false)
 
   const handleRecall = () => {
     if (isUser) {
